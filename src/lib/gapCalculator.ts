@@ -1,24 +1,79 @@
-import { GapInputs, GapResult } from './types'
+import type { AuditInput, GapResult, CompoundCurvePoint } from "./types";
 
-// Deterministic, simple gap calculation
-export function calculateGap(inputs: GapInputs): GapResult {
-  const capacity = Number.isFinite(inputs.capacity) ? inputs.capacity : 0
-  const current = Number.isFinite(inputs.currentRevenue) ? inputs.currentRevenue : 0
-  const target = Number.isFinite(inputs.targetRevenue) ? inputs.targetRevenue : 0
+const safeDivide = (a: number, b: number) => (b === 0 ? 0 : a / b);
 
-  const gap = target - current
-  const gapPercent = target !== 0 ? (gap / Math.max(1, target)) : 0
-  const capacityUtilization = capacity > 0 ? current / capacity : 0
+export function calculateGap(
+  input: AuditInput
+): { result: GapResult; curve: CompoundCurvePoint[] } {
+  const scoreDelta = input.targetScore - input.currentScore;
+  const growthFactor = Math.pow(scoreDelta / 50, 1.4);
 
-  // Round to cents / 4 decimals for percents for deterministic output
-  const roundMoney = (v: number) => Math.round(v * 100) / 100
-  const roundPercent = (v: number) => Math.round(v * 10000) / 10000
+  const leadMultiplier = 1 + Math.min(3, Math.max(0, growthFactor));
+  const projectedLeads = input.currentLeadsPerMonth * leadMultiplier;
 
-  const result: GapResult = {
-    gap: roundMoney(gap),
-    gapPercent: roundPercent(gapPercent),
-    capacityUtilization: roundPercent(capacityUtilization),
+  const projectedCloseRate = Math.min(
+    0.45,
+    input.closeRate * (1 + growthFactor * 0.6)
+  );
+
+  const currentDeals = input.currentLeadsPerMonth * input.closeRate;
+  const projectedDeals = projectedLeads * projectedCloseRate;
+
+  const currentRevenue = currentDeals * input.avgDealValue;
+  const projectedRevenue = projectedDeals * input.avgDealValue;
+
+  const compoundMultiplier = safeDivide(
+    projectedDeals,
+    Math.max(1, currentDeals)
+  );
+
+  const revenueGap = {
+    min: (projectedRevenue - currentRevenue) * 0.75,
+    max: (projectedRevenue - currentRevenue) * 1.25,
+  };
+
+  const maxCACPerDeal =
+    input.avgDealValue * input.avgJobMarginPct * 0.8;
+
+  const maxMonthlyAdBudget = maxCACPerDeal * projectedDeals;
+
+  const additionalTechniciansNeeded = Math.max(
+    0,
+    Math.ceil(
+      safeDivide(
+        projectedDeals - currentDeals,
+        input.jobsPerTechnicianPerMonth
+      )
+    )
+  );
+
+  const curve: CompoundCurvePoint[] = [];
+  for (let s = input.currentScore; s <= 90; s += 5) {
+    const d = Math.pow((s - input.currentScore) / 50, 1.4);
+    const lm = 1 + Math.min(3, Math.max(0, d));
+    const cr = Math.min(0.45, input.closeRate * (1 + d * 0.6));
+
+    curve.push({
+      score: s,
+      leads: Math.round(input.currentLeadsPerMonth * lm),
+      closeRate: cr,
+      compoundIndex: lm * cr,
+    });
   }
 
-  return result
+  return {
+    result: {
+      currentDeals,
+      projectedDeals,
+      currentRevenue,
+      projectedRevenue,
+      revenueGap,
+      compoundMultiplier,
+      projectedCloseRate,
+      maxCACPerDeal,
+      maxMonthlyAdBudget,
+      additionalTechniciansNeeded,
+    },
+    curve,
+  };
 }
