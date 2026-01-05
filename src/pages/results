@@ -1,0 +1,18 @@
+import { useSearchParams } from "react-router-dom";
+import { validateAuditInput } from "../../lib/validate";
+import { calculateGap } from "../../lib/gapCalculator";
+import InputsPanel from "../../components/gap/InputsPanel";
+
+export default function AuditResultsPage() {
+  const [params] = useSearchParams();
+  const input = validateAuditInput(Object.fromEntries(params.entries()));
+  const { result } = calculateGap(input);
+
+  return (
+    <div style={{ padding: 32 }}>
+      <h1>Revenue Gap Analyzer</h1>
+      <InputsPanel />
+      <pre>{JSON.stringify(result, null, 2)}</pre>
+    </div>
+  );
+}
