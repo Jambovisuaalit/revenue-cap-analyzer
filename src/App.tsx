@@ -1,17 +1,11 @@
-import React from 'react'
-import AuditResultsPage from './pages/audit/results'
+import { Routes, Route, Navigate } from "react-router-dom";
+import AuditResultsPage from "./pages/audit/results";
 
-const App: React.FC = () => {
+export default function App() {
   return (
-    <div>
-      <header style={{ padding: 16, borderBottom: '1px solid #eee' }}>
-        <h1>Revenue cap analyzer</h1>
-      </header>
-      <main style={{ padding: 16 }}>
-        <AuditResultsPage />
-      </main>
-    </div>
-  )
+    <Routes>
+      <Route path="/" element={<Navigate to="/audit/results" replace />} />
+      <Route path="/audit/results" element={<AuditResultsPage />} />
+    </Routes>
+  );
 }
-
-export default App
